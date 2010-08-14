@@ -49,7 +49,7 @@ int scullc_trim(struct scullc_dev *dev);
 void scullc_cleanup(void);
 
 /* declare one cache pointer: use it for all devices */
-kmem_cache_t *scullc_cache;
+struct kmem_cache *scullc_cache;
 
 
 
@@ -401,7 +401,7 @@ loff_t scullc_llseek (struct file *filp, loff_t off, int whence)
 struct async_work {
 	struct kiocb *iocb;
 	int result;
-	struct work_struct work;
+	struct delayed_work work;
 };
 
 /*
@@ -437,7 +437,7 @@ static int scullc_defer_op(int write, struct kiocb *iocb, char __user *buf,
 		return result; /* No memory, just complete now */
 	stuff->iocb = iocb;
 	stuff->result = result;
-	INIT_WORK(&stuff->work, scullc_do_deferred_op, stuff);
+	INIT_DELAYED_WORK(&stuff->work, scullc_do_deferred_op);
 	schedule_delayed_work(&stuff->work, HZ/100);
 	return -EIOCBQUEUED;
 }
@@ -558,7 +558,7 @@ int scullc_init(void)
 	}
 
 	scullc_cache = kmem_cache_create("scullc", scullc_quantum,
-			0, SLAB_HWCACHE_ALIGN, NULL, NULL); /* no ctor/dtor */
+			0, SLAB_HWCACHE_ALIGN, NULL); /* no ctor/dtor */
 	if (!scullc_cache) {
 		scullc_cleanup();
 		return -ENOMEM;
