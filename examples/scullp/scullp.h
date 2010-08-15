@@ -15,6 +15,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/cdev.h>
+#include <linux/fs.h>
 
 /*
  * Macros to help debugging
