@@ -101,7 +101,7 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 /*
  * The simple form of the request function.
  */
-static void sbull_request(request_queue_t *q)
+static void sbull_request(struct request_queue *q)
 {
 	struct request *req;
 
@@ -148,12 +148,19 @@ static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
  */
 static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 {
-	struct bio *bio;
+	struct bio_vec *bvec;
 	int nsect = 0;
+	struct req_iterator iter;
+	sector_t sector;
     
-	rq_for_each_bio(bio, req) {
-		sbull_xfer_bio(dev, bio);
-		nsect += bio->bi_size/KERNEL_SECTOR_SIZE;
+	rq_for_each_segment(bvec, req, iter) {
+		char *buffer = __bio_kmap_atomic(iter.bio, iter.i, KM_USER0);
+		sector = iter.bio->bi_sector;
+		sbull_transfer(dev, sector, bio_cur_sectors(iter.bio),
+				buffer, bio_data_dir(iter.bio) == WRITE);
+		sector += bio_cur_sectors(iter.bio);
+		__bio_kunmap_atomic(iter.bio, KM_USER0);
+		nsect += iter.bio->bi_size/KERNEL_SECTOR_SIZE;
 	}
 	return nsect;
 }
@@ -163,7 +170,7 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 /*
  * Smarter request function that "handles clustering".
  */
-static void sbull_full_request(request_queue_t *q)
+static void sbull_full_request(struct request_queue *q)
 {
 	struct request *req;
 	int sectors_xferred;
@@ -176,9 +183,8 @@ static void sbull_full_request(request_queue_t *q)
 			continue;
 		}
 		sectors_xferred = sbull_xfer_request(dev, req);
-		if (! end_that_request_first(req, 1, sectors_xferred)) {
+		if (! blk_end_request(req, 1, sectors_xferred)) {
 			blkdev_dequeue_request(req);
-			end_that_request_last(req);
 		}
 	}
 }
@@ -188,13 +194,13 @@ static void sbull_full_request(request_queue_t *q)
 /*
  * The direct make request version.
  */
-static int sbull_make_request(request_queue_t *q, struct bio *bio)
+static int sbull_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct sbull_dev *dev = q->queuedata;
 	int status;
 
 	status = sbull_xfer_bio(dev, bio);
-	bio_endio(bio, bio->bi_size, status);
+	bio_endio(bio, status);
 	return 0;
 }
 
@@ -441,7 +447,7 @@ static void sbull_exit(void)
 		}
 		if (dev->queue) {
 			if (request_mode == RM_NOQUEUE)
-				blk_put_queue(dev->queue);
+				kobject_put(&dev->queue->kobj);
 			else
 				blk_cleanup_queue(dev->queue);
 		}
