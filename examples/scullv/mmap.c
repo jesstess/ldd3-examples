@@ -57,12 +57,12 @@ void scullv_vma_close(struct vm_area_struct *vma)
  * is individually decreased, and would drop to 0.
  */
 
-struct page *scullv_vma_nopage(struct vm_area_struct *vma,
-                                unsigned long address, int *type)
+struct page *scullv_vma_fault(struct vm_area_struct *vma,
+			      unsigned long address, int *type)
 {
 	unsigned long offset;
 	struct scullv_dev *ptr, *dev = vma->vm_private_data;
-	struct page *page = NOPAGE_SIGBUS;
+	struct page *page = VM_FAULT_SIGBUS;
 	void *pageptr = NULL; /* default to "missing" */
 
 	down(&dev->sem);
@@ -103,7 +103,7 @@ struct page *scullv_vma_nopage(struct vm_area_struct *vma,
 struct vm_operations_struct scullv_vm_ops = {
 	.open =     scullv_vma_open,
 	.close =    scullv_vma_close,
-	.nopage =   scullv_vma_nopage,
+	.fault =    scullv_vma_fault,
 };
 
 
