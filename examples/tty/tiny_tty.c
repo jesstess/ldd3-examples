@@ -23,6 +23,7 @@
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
+#include <linux/interrupt.h>
 #include <asm/uaccess.h>
 
 
@@ -75,11 +76,8 @@ static void tiny_timer(unsigned long timer_data)
 
 	/* send the data to the tty layer for users to read.  This doesn't
 	 * actually push the data through unless tty->low_latency is set */
-	for (i = 0; i < data_size; ++i) {
-		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
-			tty_flip_buffer_push(tty);
-		tty_insert_flip_char(tty, data[i], TTY_NORMAL);
-	}
+	tty_buffer_request_room(tty, data_size);
+	tty_insert_flip_string(tty, data, data_size);
 	tty_flip_buffer_push(tty);
 
 	/* resubmit the timer again */
@@ -511,6 +509,10 @@ static struct tty_operations serial_ops = {
 	.write = tiny_write,
 	.write_room = tiny_write_room,
 	.set_termios = tiny_set_termios,
+	.read_proc = tiny_read_proc,
+	.tiocmget = tiny_tiocmget,
+	.tiocmset = tiny_tiocmset,
+	.ioctl = tiny_ioctl,
 };
 
 static struct tty_driver *tiny_tty_driver;
@@ -529,22 +531,13 @@ static int __init tiny_init(void)
 	tiny_tty_driver->owner = THIS_MODULE;
 	tiny_tty_driver->driver_name = "tiny_tty";
 	tiny_tty_driver->name = "ttty";
-	tiny_tty_driver->devfs_name = "tts/ttty%d";
 	tiny_tty_driver->major = TINY_TTY_MAJOR,
 	tiny_tty_driver->type = TTY_DRIVER_TYPE_SERIAL,
 	tiny_tty_driver->subtype = SERIAL_TYPE_NORMAL,
-	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS,
+	tiny_tty_driver->flags = TTY_DRIVER_REAL_RAW,
 	tiny_tty_driver->init_termios = tty_std_termios;
 	tiny_tty_driver->init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	tty_set_operations(tiny_tty_driver, &serial_ops);
-
-	/* hack to make the book purty, yet still use these functions in the
-	 * real driver.  They really should be set up in the serial_ops
-	 * structure above... */
-	tiny_tty_driver->read_proc = tiny_read_proc;
-	tiny_tty_driver->tiocmget = tiny_tiocmget;
-	tiny_tty_driver->tiocmset = tiny_tiocmset;
-	tiny_tty_driver->ioctl = tiny_ioctl;
 
 	/* register the tty driver */
 	retval = tty_register_driver(tiny_tty_driver);
