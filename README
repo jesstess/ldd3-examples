@@ -1,0 +1,42 @@
+ldd3-examples: an updated version of the Linux Device Drivers 3 example library
+at http://examples.oreilly.com/9780596005900/
+
+Source is freely available at http://github.com/jesstess/ldd3-examples/
+
+
+Background
+----------
+
+Linux Device Drivers 3 (http://lwn.net/Kernel/LDD3/,
+http://oreilly.com/catalog/9781565922921/) comes with an example library written
+for the 2.6.10 kernel (get the tarball at
+http://examples.oreilly.com/9780596005900/). Many of the kernel APIs have
+changed since then, and most of the examples no longer compile or work against
+more recent kernels.
+
+This project aims to update the examples library to be compatible with newer
+kernels, with a minimal diff. This means it doesn't include fixes for errata
+(http://oreilly.com/catalog/errata.csp?isbn=9781565922921) or remove compiler
+warnings that are present in the original example library.
+
+
+Compiling the examples
+----------------------
+
+Without editing the Makefiles, most examples error out during compilation
+because of CFLAGS error. One way to get around this is to compile with the
+KBUILD_NOPEDANTIC environment variable set. For example, to build the whole
+library, from within the examples/ directory you could:
+
+$ export KBUILD_NOPEDANTIC=1
+$ make
+
+or
+
+$ make KBUILD_NOPEDANTIC=1
+
+
+Bugs
+----
+
+Please send bugs reports, comments, and suggests to jesstess@mit.edu.
