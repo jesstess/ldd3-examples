@@ -15,7 +15,6 @@
  * $Id: snull.c,v 1.21 2004/11/05 02:36:03 rubini Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/moduleparam.h>
@@ -630,6 +629,17 @@ static struct header_ops snull_header_ops = {
 	.rebuild = snull_rebuild_header,
 };
 
+static const struct net_device_ops snull_net_device_ops = {
+	.ndo_open       = snull_open,
+	.ndo_stop       = snull_release,
+	.ndo_set_config = snull_config,
+	.ndo_start_xmit = snull_tx,
+	.ndo_do_ioctl   = snull_ioctl,
+	.ndo_get_stats  = snull_stats,
+	.ndo_change_mtu = snull_change_mtu,
+	.ndo_tx_timeout = snull_tx_timeout,
+};
+
 /*
  * The init function (sometimes called probe).
  * It is invoked by register_netdev()
@@ -652,14 +662,7 @@ void snull_init(struct net_device *dev)
 	ether_setup(dev); /* assign some of the fields */
 
 	dev->header_ops      = &snull_header_ops;
-	dev->open            = snull_open;
-	dev->stop            = snull_release;
-	dev->set_config      = snull_config;
-	dev->hard_start_xmit = snull_tx;
-	dev->do_ioctl        = snull_ioctl;
-	dev->get_stats       = snull_stats;
-	dev->change_mtu      = snull_change_mtu;  
-	dev->tx_timeout      = snull_tx_timeout;
+	dev->netdev_ops      = &snull_net_device_ops;
 	dev->watchdog_timeo = timeout;
 	netif_napi_add(dev, &priv->napi, snull_poll, 2);
 	/* keep the default flags, just add NOARP */
