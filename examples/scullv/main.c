@@ -15,7 +15,6 @@
  * $Id: _main.c.in,v 1.21 2004/10/14 20:11:39 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -271,8 +270,7 @@ ssize_t scullv_write (struct file *filp, const char __user *buf, size_t count,
  * The ioctl() implementation
  */
 
-int scullv_ioctl (struct inode *inode, struct file *filp,
-                 unsigned int cmd, unsigned long arg)
+long scullv_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 {
 
 	int err = 0, ret = 0, tmp;
@@ -471,7 +469,7 @@ struct file_operations scullv_fops = {
 	.llseek =    scullv_llseek,
 	.read =	     scullv_read,
 	.write =     scullv_write,
-	.ioctl =     scullv_ioctl,
+	.unlocked_ioctl = scullv_ioctl,
 	.mmap =	     scullv_mmap,
 	.open =	     scullv_open,
 	.release =   scullv_release,
