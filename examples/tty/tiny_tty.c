@@ -12,7 +12,6 @@
  * from some kind of hardware.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -24,6 +23,8 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/interrupt.h>
+#include <linux/sched.h>
+#include <linux/seq_file.h>
 #include <asm/uaccess.h>
 
 
@@ -103,7 +104,7 @@ static int tiny_open(struct tty_struct *tty, struct file *file)
 		if (!tiny)
 			return -ENOMEM;
 
-		init_MUTEX(&tiny->sem);
+		sema_init(&tiny->sem, 1);
 		tiny->open_count = 0;
 		tiny->timer = NULL;
 
@@ -352,34 +353,22 @@ static int tiny_tiocmset(struct tty_struct *tty, struct file *file,
 	return 0;
 }
 
-static int tiny_read_proc(char *page, char **start, off_t off, int count,
-                          int *eof, void *data)
+static int tiny_proc_show(struct seq_file *m, void *v)
 {
 	struct tiny_serial *tiny;
-	off_t begin = 0;
 	int length = 0;
 	int i;
 
-	length += sprintf(page, "tinyserinfo:1.0 driver:%s\n", DRIVER_VERSION);
-	for (i = 0; i < TINY_TTY_MINORS && length < PAGE_SIZE; ++i) {
+	length += seq_printf(m, "tinyserinfo:1.0 driver:%s\n", DRIVER_VERSION);
+	for (i = 0; i < TINY_TTY_MINORS; i++) {
 		tiny = tiny_table[i];
 		if (tiny == NULL)
 			continue;
 
-		length += sprintf(page+length, "%d\n", i);
-		if ((length + begin) > (off + count))
-			goto done;
-		if ((length + begin) < off) {
-			begin += length;
-			length = 0;
-		}
+		seq_printf(m, "%d\n", i);
 	}
-	*eof = 1;
-done:
-	if (off >= (length + begin))
-		return 0;
-	*start = page + (off-begin);
-	return (count < begin+length-off) ? count : begin + length-off;
+
+	return 0;
 }
 
 #define tiny_ioctl tiny_ioctl_tiocgserial
@@ -503,13 +492,26 @@ static int tiny_ioctl(struct tty_struct *tty, struct file *file,
 	return -ENOIOCTLCMD;
 }
 
+static int tiny_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, tiny_proc_show, NULL);
+}
+
+static const struct file_operations serial_proc_fops = {
+	.owner = THIS_MODULE,
+	.open = tiny_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release= single_release,
+};
+
 static struct tty_operations serial_ops = {
 	.open = tiny_open,
 	.close = tiny_close,
 	.write = tiny_write,
 	.write_room = tiny_write_room,
 	.set_termios = tiny_set_termios,
-	.read_proc = tiny_read_proc,
+	.proc_fops = &serial_proc_fops,
 	.tiocmget = tiny_tiocmget,
 	.tiocmset = tiny_tiocmset,
 	.ioctl = tiny_ioctl,
