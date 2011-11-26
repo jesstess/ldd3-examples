@@ -2,7 +2,6 @@
  * Sample disk driver, from the beginning.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -105,20 +104,20 @@ static void sbull_request(struct request_queue *q)
 {
 	struct request *req;
 
-	while ((req = elv_next_request(q)) != NULL) {
+	while ((req = blk_peek_request(q)) != NULL) {
 		struct sbull_dev *dev = req->rq_disk->private_data;
-		if (! blk_fs_request(req)) {
+		if ((req == NULL) || (req->cmd_type != REQ_TYPE_FS)) {
 			printk (KERN_NOTICE "Skip non-fs request\n");
-			end_request(req, 0);
+			__blk_end_request_cur(req, -EIO);
 			continue;
 		}
     //    	printk (KERN_NOTICE "Req dev %d dir %ld sec %ld, nr %d f %lx\n",
     //    			dev - Devices, rq_data_dir(req),
     //    			req->sector, req->current_nr_sectors,
     //    			req->flags);
-		sbull_transfer(dev, req->sector, req->current_nr_sectors,
+		sbull_transfer(dev, blk_rq_pos(req), blk_rq_cur_sectors(req),
 				req->buffer, rq_data_dir(req));
-		end_request(req, 1);
+		__blk_end_request_cur(req, 0);
 	}
 }
 
@@ -135,9 +134,10 @@ static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
 	/* Do each segment independently. */
 	bio_for_each_segment(bvec, bio, i) {
 		char *buffer = __bio_kmap_atomic(bio, i, KM_USER0);
-		sbull_transfer(dev, sector, bio_cur_sectors(bio),
+		unsigned int len = bvec->bv_len;
+		sbull_transfer(dev, sector, len,
 				buffer, bio_data_dir(bio) == WRITE);
-		sector += bio_cur_sectors(bio);
+		sector += len;
 		__bio_kunmap_atomic(bio, KM_USER0);
 	}
 	return 0; /* Always "succeed" */
@@ -156,9 +156,9 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 	rq_for_each_segment(bvec, req, iter) {
 		char *buffer = __bio_kmap_atomic(iter.bio, iter.i, KM_USER0);
 		sector = iter.bio->bi_sector;
-		sbull_transfer(dev, sector, bio_cur_sectors(iter.bio),
+		sbull_transfer(dev, sector, blk_rq_cur_sectors(req),
 				buffer, bio_data_dir(iter.bio) == WRITE);
-		sector += bio_cur_sectors(iter.bio);
+		sector += blk_rq_cur_sectors(req);
 		__bio_kunmap_atomic(iter.bio, KM_USER0);
 		nsect += iter.bio->bi_size/KERNEL_SECTOR_SIZE;
 	}
@@ -176,15 +176,15 @@ static void sbull_full_request(struct request_queue *q)
 	int sectors_xferred;
 	struct sbull_dev *dev = q->queuedata;
 
-	while ((req = elv_next_request(q)) != NULL) {
-		if (! blk_fs_request(req)) {
+	while ((req = blk_peek_request(q)) != NULL) {
+		if ((req == NULL) || (req->cmd_type != REQ_TYPE_FS)) {
 			printk (KERN_NOTICE "Skip non-fs request\n");
-			end_request(req, 0);
+			__blk_end_request_cur(req, -EIO);
 			continue;
 		}
 		sectors_xferred = sbull_xfer_request(dev, req);
 		if (! blk_end_request(req, 1, sectors_xferred)) {
-			blkdev_dequeue_request(req);
+			blk_start_request(req);
 		}
 	}
 }
@@ -379,7 +379,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 			goto out_vfree;
 		break;
 	}
-	blk_queue_hardsect_size(dev->queue, hardsect_size);
+	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	dev->queue->queuedata = dev;
 	/*
 	 * And the gendisk structure.
